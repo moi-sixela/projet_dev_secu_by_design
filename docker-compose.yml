@@ -1,0 +1,51 @@
+
+version: "3.8"
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: testvault
+      MYSQL_USER: testvault
+      MYSQL_PASSWORD: motdepasse123
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+
+  vault:
+    image: hashicorp/vault:1.15.5
+    container_name: vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    command: >
+      sh -c "
+      vault server -dev &
+      sleep 3 &&
+      export VAULT_ADDR=http://127.0.0.1:8200 &&
+      export VAULT_TOKEN=root &&
+      vault kv put secret/database/testvault username=testvault password=motdepasse123 &&
+      wait
+      "
+
+  app:
+    build: .
+    container_name: app
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mariadb
+      - vault
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: root
+    volumes:
+      - .:/app
+    command: python app.py
